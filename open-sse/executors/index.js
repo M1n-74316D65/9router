@@ -39,7 +39,7 @@ import { ClaudeAgentExecutor } from "./claude-agent.js";
 
 const executors = {
   antigravity: new AntigravityExecutor(),
-  claude: new ClaudeAgentExecutor(),
+  "claude-cli": new ClaudeAgentExecutor(),
   azure: new AzureExecutor(),
   "gemini-cli": new GeminiCLIExecutor(),
   github: new GithubExecutor(),

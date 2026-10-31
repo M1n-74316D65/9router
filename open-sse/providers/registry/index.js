@@ -123,6 +123,7 @@ import p116 from "./tokenrouter.js";
 import p117 from "./selfhosted-stt.js";
 import p118 from "./selfhosted-tts.js";
 import p119 from "./selfhosted-embedding.js";
+import p154 from "./claude-cli.js";
 import p120 from "./fish-audio.js";
 import p121 from "./alitp-intl.js";
 import p122 from "./xquik.js";
@@ -294,4 +295,5 @@ export default [
   p151,
   p152,
   p153,
+  p154,
 ];

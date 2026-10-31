@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { assembleClaudeMessage, canUseClaudeAgent, ClaudeAgentExecutor } from "../../open-sse/executors/claude-agent.js";
+import { assembleClaudeMessage, canUseClaudeAgent, claudeAgentFallbackReason, ClaudeAgentExecutor } from "../../open-sse/executors/claude-agent.js";
 
 const { queryMock } = vi.hoisted(() => ({ queryMock: vi.fn() }));
 vi.mock("@anthropic-ai/claude-agent-sdk", () => ({ query: queryMock }));
@@ -22,28 +22,21 @@ const oauth = { accessToken: "sk-ant-oat01-test" };
 const user = (content) => ({ role: "user", content });
 
 describe("canUseClaudeAgent", () => {
-  it("routes OAuth connection with plain text messages to the local CLI", () => {
-    expect(canUseClaudeAgent({ messages: [user("hi")] }, oauth)).toBe(true);
+  it("routes plain text messages to the local CLI", () => {
+    expect(canUseClaudeAgent({ messages: [user("hi")] })).toBe(true);
   });
 
-  it("keeps API-key connections on the direct path", () => {
-    expect(canUseClaudeAgent({ messages: [user("hi")] }, { apiKey: "sk-ant-api03-x" })).toBe(false);
-  });
-
-  it("falls back when there are no OAuth credentials", () => {
-    expect(canUseClaudeAgent({ messages: [user("hi")] }, {})).toBe(false);
-  });
-
-  it("falls back when client tools are present", () => {
+  it("rejects client tools", () => {
     const body = { messages: [user("hi")], tools: [{ name: "Read", input_schema: {} }] };
-    expect(canUseClaudeAgent(body, oauth)).toBe(false);
+    expect(canUseClaudeAgent(body)).toBe(false);
+    expect(claudeAgentFallbackReason(body)).toBe("client-tools");
   });
 
-  it("falls back on image or tool_result blocks", () => {
+  it("rejects image or tool_result blocks", () => {
     const image = user([{ type: "image", source: {} }]);
     const toolResult = user([{ type: "tool_result", tool_use_id: "t1", content: "ok" }]);
-    expect(canUseClaudeAgent({ messages: [image] }, oauth)).toBe(false);
-    expect(canUseClaudeAgent({ messages: [toolResult] }, oauth)).toBe(false);
+    expect(claudeAgentFallbackReason({ messages: [image] })).toBe("non-text-content");
+    expect(claudeAgentFallbackReason({ messages: [toolResult] })).toBe("non-text-content");
   });
 
   it("ignores thinking blocks in history", () => {
@@ -52,7 +45,13 @@ describe("canUseClaudeAgent", () => {
       { role: "assistant", content: [{ type: "thinking", thinking: "...", signature: "s" }, { type: "text", text: "hello" }] },
       user("again"),
     ];
-    expect(canUseClaudeAgent({ messages }, oauth)).toBe(true);
+    expect(canUseClaudeAgent({ messages })).toBe(true);
+  });
+
+  it("is registered as the noAuth claude-cli provider", async () => {
+    const { PROVIDERS } = await import("../../open-sse/config/providers.js");
+    expect(PROVIDERS["claude-cli"]).toMatchObject({ noAuth: true, format: "claude" });
+    expect(PROVIDERS.claude?.noAuth).not.toBe(true);
   });
 });
 
@@ -85,6 +84,13 @@ describe("ClaudeAgentExecutor.execute", () => {
     expect(options.systemPrompt).toBe("Be brief.");
     expect(options.tools).toEqual([]);
     expect(options.model).toBe("claude-haiku-4-5-20251001");
+  });
+
+  it("throws for client tools instead of calling the CLI", async () => {
+    const withTools = { ...body, tools: [{ name: "Read", input_schema: {} }] };
+    queryMock.mockClear();
+    await expect(new ClaudeAgentExecutor().execute({ model: "m", body: withTools, stream: true })).rejects.toThrow('use provider "claude"');
+    expect(queryMock).not.toHaveBeenCalled();
   });
 
   it("rejects before answering when the CLI fails to start", async () => {

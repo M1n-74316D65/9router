@@ -62,18 +62,16 @@ export function buildClaudeAgentEnv(source = process.env) {
   return env;
 }
 
-// Subscription (OAuth) connections only: API-key connections keep the direct HTTP path.
-// Client tools and images are not replayable through the CLI yet, so those requests fall back too.
-// Returns the fallback reason, or null when the request goes through the local CLI.
-export function claudeAgentFallbackReason(body, credentials) {
-  if (credentials?.apiKey || !credentials?.accessToken) return "no-oauth";
+// Client tools and images are not replayable through the CLI yet: those requests are rejected here.
+// Returns the rejection reason, or null when the request goes through the local CLI.
+export function claudeAgentFallbackReason(body) {
   if (Array.isArray(body?.tools) && body.tools.length > 0) return "client-tools";
   if (!Array.isArray(body?.messages) || buildPrompt(body.messages) === null) return "non-text-content";
   return null;
 }
 
-export function canUseClaudeAgent(body, credentials) {
-  return claudeAgentFallbackReason(body, credentials) === null;
+export function canUseClaudeAgent(body) {
+  return claudeAgentFallbackReason(body) === null;
 }
 
 // Rebuilds a non-stream Claude Message from the raw stream events the CLI emitted.
@@ -102,15 +100,15 @@ export function assembleClaudeMessage(events) {
 
 export class ClaudeAgentExecutor extends DefaultExecutor {
   constructor() {
-    super("claude");
+    super("claude-cli");
   }
 
   async execute(args) {
-    const { model, body, stream: wantStream, signal, log, credentials } = args;
-    const fallbackReason = claudeAgentFallbackReason(body, credentials);
-    if (fallbackReason) {
-      log?.info?.("CLAUDE_AGENT", `route=direct reason=${fallbackReason}`);
-      return super.execute(args);
+    const { model, body, stream: wantStream, signal, log } = args;
+    const rejectReason = claudeAgentFallbackReason(body);
+    if (rejectReason) {
+      log?.info?.("CLAUDE_AGENT", `route=reject reason=${rejectReason}`);
+      throw new Error(`claude-cli does not support ${rejectReason}; use provider "claude" for tool requests`);
     }
     log?.info?.("CLAUDE_AGENT", "route=local-cli");
 
