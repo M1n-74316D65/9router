@@ -16,7 +16,7 @@ export default {
       text: "Uses your local Claude Code login. Run `claude auth login` first. No connection needed. Chat only: client tools are not supported.",
     },
   },
-  category: "oauth",
+  category: "free",
   authType: "none",
   authModes: ["none"],
   transport: {
